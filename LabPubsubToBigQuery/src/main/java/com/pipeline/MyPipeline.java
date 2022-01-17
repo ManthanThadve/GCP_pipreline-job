@@ -6,42 +6,38 @@ import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import org.apache.beam.runners.dataflow.DataflowRunner;
 import org.apache.beam.sdk.Pipeline;
-import org.apache.beam.sdk.PipelineResult;
-import org.apache.beam.sdk.io.TextIO;
+
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
-import org.apache.beam.sdk.schemas.Schema;
-import org.apache.beam.sdk.transforms.*;
-import org.apache.beam.sdk.transforms.windowing.*;
+
+import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.PTransform;
+import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.beam.sdk.transforms.windowing.FixedWindows;
+import org.apache.beam.sdk.transforms.windowing.Window;
 import org.apache.beam.sdk.values.*;
+
 import org.joda.time.Duration;
-import org.joda.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Objects;
 
 public class MyPipeline {
 
-    static final TupleTag<bQTableSchema> parsedMessages = new TupleTag<bQTableSchema>() {
+    static final TupleTag<bQTableSchema> VALID_Messages = new TupleTag<bQTableSchema>() {
     };
-    static final TupleTag<String> unParsedMessages = new TupleTag<String>() {
+    static final TupleTag<String> INVALID_Messages = new TupleTag<String>() {
     };
 
     private static final Logger LOG = LoggerFactory.getLogger(MyPipeline.class);
 
 
-    public static final Schema BQSchema = Schema.builder()
-            .addInt64Field("id")
-            .addStringField("name")
-            .addStringField("surname")
-            .build();
-
     public static void main(String[] args) {
 
         MyOptions options = PipelineOptionsFactory.fromArgs(args).as(MyOptions.class);
         options.setRunner(DataflowRunner.class);
+        options.setProject("nttdata-c4e-bde");
 
         TableReference tableSpec = new TableReference()
                 .setProjectId("nttdata-c4e-bde")
@@ -63,13 +59,13 @@ public class MyPipeline {
                                     Gson gson = new Gson();
                                     try {
                                         bQTableSchema commonLog = gson.fromJson(json, bQTableSchema.class);
-                                        context.output(parsedMessages, commonLog);
+                                        context.output(VALID_Messages, commonLog);
                                     } catch (JsonSyntaxException e) {
-                                        context.output(unParsedMessages, json);
+                                        context.output(INVALID_Messages, json);
                                     }
                                 }
                             })
-                            .withOutputTags(parsedMessages, TupleTagList.of(unParsedMessages)));
+                            .withOutputTags(VALID_Messages, TupleTagList.of(INVALID_Messages)));
         }
     }
 
@@ -77,7 +73,7 @@ public class MyPipeline {
         @ProcessElement
         public void processing(ProcessContext context) {
             TableRow tableRow = new TableRow()
-                    .set("id", Integer.parseInt(String.valueOf((context.element()))))
+                    .set("id", context.element())
                     .set("name", context.element())
                     .set("surname", context.element());
 
@@ -91,14 +87,16 @@ public class MyPipeline {
 
         PCollectionTuple pubSubMessages =
                 p.apply("ReadPubSubMessages", PubsubIO.readStrings()
-                                // Retrieve timestamp information from Pubsub Message attributes
                                 .withTimestampAttribute("timestamp")
-                                .fromTopic(options.getInputTopicName()))
+                                .fromSubscription(options.getInputSubscriptionName()))
                         .apply("ConvertMessageToCommonLog", new CommonLog());
 
         pubSubMessages
-                .get(parsedMessages)
-                        .apply("ConvertToTableRow", ParDo.of(new ConvertToTableRow()))
+                .get(VALID_Messages)
+                .apply("WindowBy10Sec", Window.<bQTableSchema>into(FixedWindows.of(Duration.standardSeconds(10L))).withAllowedLateness(Duration.standardSeconds(5L)))
+
+                .apply("ConvertToTableRow", ParDo.of(new ConvertToTableRow()))
+
                                 .apply("WriteToBQ", BigQueryIO.writeTableRows().to(tableSpec)
                                         .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_NEVER)
                                         .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_APPEND)
@@ -106,9 +104,9 @@ public class MyPipeline {
 
         pubSubMessages
         // Retrieve unparsed messages
-                .get(unParsedMessages)
+                .get(INVALID_Messages)
 //                .apply("ConverteToString", MapElements.)
-                .apply("WriteToDeadLetterTopic", PubsubIO.writeStrings().to(options.getDLQTopicName() + "/deadletter/*"));
+                .apply("WriteToDeadLetterTopic", PubsubIO.writeStrings().to(options.getDLQTopicName()));
 
 
         p.run().waitUntilFinish();

@@ -7,8 +7,8 @@ import org.apache.beam.sdk.options.PipelineOptions;
 public interface MyOptions extends DataflowPipelineOptions, PipelineOptions {
 
     @Description("Input Topic name")
-    void setInputTopicName(String inputTopicName);
-    String getInputTopicName();
+    void setInputSubscriptionName(String inputTopicName);
+    String getInputSubscriptionName();
 
     @Description("Dead letter Topic name")
     void setDLQTopicName(String DLQTopicName);
