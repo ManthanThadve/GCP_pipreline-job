@@ -10,10 +10,10 @@
 
     <properties>
         <!-- Dependency properties -->
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
         <beam.version>2.35.0</beam.version>
-        <java.version>17</java.version>
+        <java.version>11</java.version>
         <slf4j.version>1.7.25</slf4j.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven-dependency-plugin.version>3.0.1</maven-dependency-plugin.version>
