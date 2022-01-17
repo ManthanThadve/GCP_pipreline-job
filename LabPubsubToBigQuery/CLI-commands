@@ -6,7 +6,7 @@ mvn compile exec:java -Dexec.mainClass=com.pipeline.MyPipeline \
 --gcpTempLocation=gs://c4e-uc1-dataflow-temp-4/temp \
 --stagingLocation=gs://c4e-uc1-dataflow-temp-4/staging \
 --subnetwork=regions/europe-west4/subnetworks/subnet-uc1-4 \
---inputTopicName=projects/nttdata-c4e-bde/subscriptions/uc1-input-topic-sub-4 \
+--inputSubscriptionName=projects/nttdata-c4e-bde/subscriptions/uc1-input-topic-sub-4 \
 --DLQTopicName=projects/nttdata-c4e-bde/topics/uc1-dlq-topic-4 \
 --streaming"
 
