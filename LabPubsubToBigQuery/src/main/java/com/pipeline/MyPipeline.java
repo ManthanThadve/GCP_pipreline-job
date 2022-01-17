@@ -11,6 +11,7 @@ import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 
+import org.apache.beam.sdk.schemas.Schema;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
@@ -32,6 +33,11 @@ public class MyPipeline {
 
     private static final Logger LOG = LoggerFactory.getLogger(MyPipeline.class);
 
+    public static final Schema BQSchema = Schema.builder()
+            .addInt64Field("id")
+            .addStringField("name")
+            .addStringField("surname")
+            .build();
 
     public static void main(String[] args) {
 
@@ -93,11 +99,11 @@ public class MyPipeline {
 
         pubSubMessages
                 .get(VALID_Messages)
-                .apply("WindowBy10Sec", Window.<bQTableSchema>into(FixedWindows.of(Duration.standardSeconds(10L))).withAllowedLateness(Duration.standardSeconds(5L)))
+                .setRowSchema(BQSchema)
 
                 .apply("ConvertToTableRow", ParDo.of(new ConvertToTableRow()))
 
-                                .apply("WriteToBQ", BigQueryIO.writeTableRows().to(tableSpec)
+                .apply("WriteToBQ", BigQueryIO.writeTableRows().to(tableSpec)
                                         .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_NEVER)
                                         .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_APPEND)
                                 );
@@ -105,7 +111,6 @@ public class MyPipeline {
         pubSubMessages
         // Retrieve unparsed messages
                 .get(INVALID_Messages)
-//                .apply("ConverteToString", MapElements.)
                 .apply("WriteToDeadLetterTopic", PubsubIO.writeStrings().to(options.getDLQTopicName()));
 
 
