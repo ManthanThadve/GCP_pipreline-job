@@ -31,11 +31,17 @@ public class MyPipeline {
     private static final Logger LOG = LoggerFactory.getLogger(MyPipeline.class);
 
     public static void main(String[] args) throws Exception {
-
+	    
+        /**
+         *Pipeline Options.
+         */
         MyOptions options = PipelineOptionsFactory.fromArgs(args).as(MyOptions.class);
         options.setRunner(DataflowRunner.class);
         options.setProject("nttdata-c4e-bde");
-
+	    
+        /**
+         *BigQuery Table specifications.
+         */
         TableReference tableSpec = new TableReference()
                 .setProjectId("nttdata-c4e-bde")
                 .setDatasetId("uc1_4")
@@ -44,19 +50,16 @@ public class MyPipeline {
         runPipeline(options,tableSpec);
     }
 
-
+        /**
+         *Serilization Class -> tagging messages as VALID/INVALID and returns a PCollectionTuple
+         */
     public static class CommonLog extends DoFn<String, bQTableSchema> {
 
-        /**
-         *
-         */
         private static final long serialVersionUID = 1L;
 
         public static PCollectionTuple convert(PCollection<String> input) throws Exception {
             return input.apply("JsonToCommonLog", ParDo.of(new DoFn<String, bQTableSchema>() {
-                /**
-                *
-                */
+                
                 private static final long serialVersionUID = 1L;
 
                 @ProcessElement
@@ -75,23 +78,36 @@ public class MyPipeline {
         }
     }
 
-
+               /**
+                *Schema Compatible with the already extisting BigQuery table
+                */
     public static final Schema BQSchema = Schema.builder().addInt64Field("id").addStringField("name")
             .addStringField("surname").build();
 
     static public void runPipeline(MyOptions options, TableReference tableSpec) throws Exception{
         Pipeline p = Pipeline.create(options);
         System.out.println("Pipeline Created");
-
+	    
+	        /**
+                * PCollection of Json Strings from PubSub 
+                */
 		PCollection<String> pubSubMessagesStrings =
                 p.apply("ReadPubSubMessages", PubsubIO.readStrings()
                                 .fromSubscription(options.getInputSubscriptionName()));
 	    
+	    	        /**
+                * Converting the Json to commonLog (Serialization) , And tagging them As VALID
+		*If encounter any error tag the Json String as INVALID.
+                */
                 PCollectionTuple pubSubMessages = CommonLog.convert(pubSubMessagesStrings);
-
+	    
+	    
+	    	        /**
+                * Converting VALID CommonLog to Json (Deserialization), Then Converting them to Row to write into BigQuery.
+                */
         pubSubMessages
                 .get(VALID_Messages)
-                .apply(ParDo.of(new DoFn<bQTableSchema, String>() {
+                .apply(ParDo.of("CommonLogToJson", new DoFn<bQTableSchema, String>() {
                     @ProcessElement
                     public void processElement(ProcessContext context)
                     {
@@ -101,20 +117,20 @@ public class MyPipeline {
                     }
                 }))
                 
-                .apply("jsontoRow", JsonToRow.withSchema(BQSchema))
+                .apply("IsontoRow", JsonToRow.withSchema(BQSchema))
 
                 .apply("WriteToBQ", BigQueryIO.<Row>write().
                                          to(tableSpec).useBeamSchema()
                                         .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_NEVER)
                                         .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_APPEND)
                                 );
-
+	    	        /**
+                * Writing INVALID Messages into the DEAD LETTER TOPIC
+                */
         pubSubMessages
                 .get(INVALID_Messages)
                 .apply("WriteToDeadLetterTopic", PubsubIO.writeStrings().to(options.getDLQTopicName()));
 
-
         p.run().waitUntilFinish();
     }
-
 }
