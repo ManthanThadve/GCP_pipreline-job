@@ -86,30 +86,30 @@ public class MyPipeline {
 		PCollection<String> pubSubMessagesStrings =
                 p.apply("ReadPubSubMessages", PubsubIO.readStrings()
                                 .fromSubscription(options.getInputSubscriptionName()));
+	    
                 PCollectionTuple pubSubMessages = CommonLog.convert(pubSubMessagesStrings);
 
         pubSubMessages
-                .get(VALID_Messages).
-                apply(ParDo.of(new DoFn<bQTableSchema,String>() {
+                .get(VALID_Messages)
+                .apply(ParDo.of(new DoFn<bQTableSchema, String>() {
                     @ProcessElement
-                    public void processElement( ProcessContext context)
+                    public void processElement(ProcessContext context)
                     {
-                        Gson g=new Gson();
-                        String s=g.toJson(context.element());
-                         context.output(s);
+                        Gson gObj = new Gson();
+                        String jsonRecord = gObj.toJson(context.element());
+                        context.output(jsonRecord);
                     }
                 }))
                 
                 .apply("jsontoRow", JsonToRow.withSchema(BQSchema))
 
                 .apply("WriteToBQ", BigQueryIO.<Row>write().
-                to(tableSpec).useBeamSchema()
+                                         to(tableSpec).useBeamSchema()
                                         .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_NEVER)
                                         .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_APPEND)
                                 );
 
         pubSubMessages
-        // Retrieve unparsed messages
                 .get(INVALID_Messages)
                 .apply("WriteToDeadLetterTopic", PubsubIO.writeStrings().to(options.getDLQTopicName()));
 
