@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/GCP_pipreline-job.iml" filepath="$PROJECT_DIR$/.idea/GCP_pipreline-job.iml" />
+      <module fileurl="file://$PROJECT_DIR$/LabPubsubToBigQuery/LabPubsubToBigQuery.iml" filepath="$PROJECT_DIR$/LabPubsubToBigQuery/LabPubsubToBigQuery.iml" />
+    </modules>
+  </component>
+</project>
